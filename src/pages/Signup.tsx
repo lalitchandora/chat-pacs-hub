@@ -9,14 +9,12 @@ import { Loader2, Activity } from 'lucide-react';
 import { z } from 'zod';
 
 const signupSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters').max(20, 'Username must be less than 20 characters'),
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  username: z.string().min(3, 'Username must be at least 3 characters').max(64, 'Username must be less than 64 characters'),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(128, 'Password must be less than 128 characters'),
 });
 
 const Signup = () => {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +34,7 @@ const Signup = () => {
       return;
     }
 
-    const validation = signupSchema.safeParse({ username, email, password });
+    const validation = signupSchema.safeParse({ username, password });
     if (!validation.success) {
       toast({
         title: 'Validation Error',
@@ -47,7 +45,7 @@ const Signup = () => {
     }
 
     setIsLoading(true);
-    const result = await signup(username, email, password);
+    const result = await signup(username, password);
     setIsLoading(false);
 
     if (result.success) {
@@ -93,19 +91,6 @@ const Signup = () => {
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
                 autoComplete="username"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                autoComplete="email"
               />
             </div>
 

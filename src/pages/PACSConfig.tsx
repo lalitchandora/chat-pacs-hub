@@ -8,16 +8,18 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { pacsAPI } from '@/lib/api';
 import { PACSConfiguration } from '@/types';
-import { Plus, Trash2, Server, MapPin, Tag, Globe, Settings } from 'lucide-react';
+import { Plus, Trash2, Server, MapPin, Tag, Globe, Settings, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 const PACSConfig = () => {
   const [configurations, setConfigurations] = useState<PACSConfiguration[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    url: '',
+    display_name: '',
+    base_rs: '',
     location: '',
     tags: '',
   });
@@ -27,18 +29,28 @@ const PACSConfig = () => {
     loadConfigurations();
   }, []);
 
-  const loadConfigurations = () => {
-    const configs = pacsAPI.getConfigurations();
-    setConfigurations(configs);
+  const loadConfigurations = async () => {
+    setIsLoading(true);
+    const result = await pacsAPI.getConfigurations();
+    if (result.configs) {
+      setConfigurations(result.configs);
+    } else {
+      toast({
+        title: 'Error',
+        description: result.error || 'Failed to load configurations',
+        variant: 'destructive',
+      });
+    }
+    setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.url.trim()) {
+    if (!formData.display_name.trim() || !formData.base_rs.trim()) {
       toast({
         title: 'Validation Error',
-        description: 'Name and URL are required fields.',
+        description: 'Display Name and Base RS URL are required fields.',
         variant: 'destructive',
       });
       return;
@@ -49,30 +61,47 @@ const PACSConfig = () => {
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
-    pacsAPI.saveConfiguration({
-      name: formData.name.trim(),
-      url: formData.url.trim(),
+    setIsSubmitting(true);
+    const result = await pacsAPI.createConfiguration({
+      display_name: formData.display_name.trim(),
+      base_rs: formData.base_rs.trim(),
       location: formData.location.trim() || undefined,
-      tags: tags.length > 0 ? tags : undefined,
+      tags,
     });
+    setIsSubmitting(false);
 
-    setFormData({ name: '', url: '', location: '', tags: '' });
-    setIsDialogOpen(false);
-    loadConfigurations();
-
-    toast({
-      title: 'Configuration Added',
-      description: 'The PACS configuration has been saved successfully.',
-    });
+    if (result.config) {
+      setFormData({ display_name: '', base_rs: '', location: '', tags: '' });
+      setIsDialogOpen(false);
+      loadConfigurations();
+      toast({
+        title: 'Configuration Added',
+        description: 'The PACS configuration has been saved successfully.',
+      });
+    } else {
+      toast({
+        title: 'Error',
+        description: result.error || 'Failed to create configuration',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
-    pacsAPI.deleteConfiguration(id);
-    loadConfigurations();
-    toast({
-      title: 'Configuration Deleted',
-      description: `"${name}" has been removed.`,
-    });
+  const handleDelete = async (id: string, name: string) => {
+    const result = await pacsAPI.deleteConfiguration(id);
+    if (result.success) {
+      loadConfigurations();
+      toast({
+        title: 'Configuration Deleted',
+        description: `"${name}" has been removed.`,
+      });
+    } else {
+      toast({
+        title: 'Error',
+        description: result.error || 'Failed to delete configuration',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -105,30 +134,33 @@ const PACSConfig = () => {
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name *</Label>
+                  <Label htmlFor="display_name">Display Name *</Label>
                   <Input
-                    id="name"
-                    placeholder="e.g., Main Hospital PACS"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    id="display_name"
+                    placeholder="e.g., Hospital 1 – Mumbai PAC Server"
+                    value={formData.display_name}
+                    onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="url">URL *</Label>
+                  <Label htmlFor="base_rs">DICOMweb RS Base URL *</Label>
                   <Input
-                    id="url"
-                    placeholder="e.g., https://pacs.hospital.com"
-                    value={formData.url}
-                    onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                    id="base_rs"
+                    placeholder="e.g., http://host:port/dcm4chee-arc/aets/DCM/rs"
+                    value={formData.base_rs}
+                    onChange={(e) => setFormData({ ...formData, base_rs: e.target.value })}
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="location">Location (Optional)</Label>
                   <Input
                     id="location"
-                    placeholder="e.g., Building A, Floor 3"
+                    placeholder="e.g., Mumbai or Hyderabad"
                     value={formData.location}
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
@@ -138,13 +170,23 @@ const PACSConfig = () => {
                     placeholder="e.g., radiology, ct-scan, mri"
                     value={formData.tags}
                     onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
                     Cancel
                   </Button>
-                  <Button type="submit">Save Configuration</Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Configuration'
+                    )}
+                  </Button>
                 </div>
               </form>
             </DialogContent>
@@ -155,7 +197,12 @@ const PACSConfig = () => {
       {/* Content */}
       <ScrollArea className="flex-1 p-4">
         <div className="max-w-6xl mx-auto">
-          {configurations.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading configurations...</p>
+            </div>
+          ) : configurations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Server className="w-8 h-8 text-primary" />
@@ -187,17 +234,19 @@ const PACSConfig = () => {
                           <Server className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <CardTitle className="text-base">{config.name}</CardTitle>
-                          <CardDescription className="text-xs">
-                            Added {new Date(config.createdAt).toLocaleDateString()}
-                          </CardDescription>
+                          <CardTitle className="text-base">{config.display_name}</CardTitle>
+                          {config.created_at && (
+                            <CardDescription className="text-xs">
+                              Added {new Date(config.created_at).toLocaleDateString()}
+                            </CardDescription>
+                          )}
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDelete(config.id, config.name)}
+                        onClick={() => handleDelete(config.id, config.display_name)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -206,7 +255,7 @@ const PACSConfig = () => {
                   <CardContent className="space-y-3">
                     <div className="flex items-center gap-2 text-sm">
                       <Globe className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-muted-foreground truncate">{config.url}</span>
+                      <span className="text-muted-foreground truncate">{config.base_rs}</span>
                     </div>
                     {config.location && (
                       <div className="flex items-center gap-2 text-sm">

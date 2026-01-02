@@ -1,15 +1,15 @@
 export interface User {
   id: string;
   username: string;
-  email: string;
 }
 
 export interface AuthContextType {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -20,19 +20,30 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export interface ChatConversation {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  createdAt: number;
-  updatedAt: number;
+export interface ChatRequest {
+  prompt: string;
+  max_studies_per_pacs?: number;
+  max_total_studies?: number;
+  return_evaluation?: boolean;
 }
 
 export interface PACSConfiguration {
   id: string;
-  name: string;
-  url: string;
+  display_name: string;
+  base_rs: string;
   location?: string;
-  tags?: string[];
-  createdAt: number;
+  headers?: Record<string, string>;
+  auth?: Record<string, string>;
+  tags: string[];
+  created_at?: string;
+}
+
+export interface ApiResponse<T = unknown> {
+  status: 'success' | 'error';
+  message?: string;
+  data?: T;
+  error?: {
+    code?: string;
+    details?: unknown;
+  };
 }

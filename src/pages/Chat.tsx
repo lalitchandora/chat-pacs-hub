@@ -58,16 +58,28 @@ const Chat = () => {
     setIsLoading(true);
 
     try {
-      const response = await chatAPI.sendMessage(inputMessage);
+      const result = await chatAPI.sendMessage({
+        prompt: inputMessage,
+        max_studies_per_pacs: 25,
+        max_total_studies: 50,
+        return_evaluation: false,
+      });
       
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      if (result.response) {
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: result.response,
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to get response',
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Error',
