@@ -92,7 +92,6 @@ const AppSidebar = () => {
           {!isCollapsed && (
             <div className="flex-1 min-w-0 animate-fade-in">
               <p className="text-sm font-medium text-foreground truncate">{user?.username}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
           )}
         </div>

@@ -1,68 +1,86 @@
-import { User, ChatMessage, PACSConfiguration } from '@/types';
+import { User, PACSConfiguration, ApiResponse, ChatRequest } from '@/types';
 
-// Simulated delay for API calls
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// Dummy users storage
-const USERS_KEY = 'medchat_users';
-const PACS_KEY = 'medchat_pacs';
-
-interface StoredUser extends User {
-  password: string;
-}
-
-const getStoredUsers = (): StoredUser[] => {
-  const users = localStorage.getItem(USERS_KEY);
-  return users ? JSON.parse(users) : [];
+const getToken = (): string | null => {
+  return localStorage.getItem('auth_token');
 };
 
-const saveUsers = (users: StoredUser[]) => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+const authHeaders = (): HeadersInit => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 };
 
 // Auth API
 export const authAPI = {
-  async login(username: string, password: string): Promise<{ user?: User; error?: string }> {
-    await delay(800);
-    
-    const users = getStoredUsers();
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (user) {
-      const { password: _, ...userWithoutPassword } = user;
-      localStorage.setItem('current_user', JSON.stringify(userWithoutPassword));
-      return { user: userWithoutPassword };
+  async login(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        localStorage.setItem('auth_token', result.data.access_token);
+        localStorage.setItem('current_user', JSON.stringify(result.data.user));
+        return { user: result.data.user, token: result.data.access_token };
+      }
+
+      return { error: result.message || result.error?.details?.toString() || 'Login failed' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
     }
-    
-    return { error: 'Invalid username or password' };
   },
 
-  async signup(username: string, email: string, password: string): Promise<{ user?: User; error?: string }> {
-    await delay(800);
-    
-    const users = getStoredUsers();
-    
-    if (users.find(u => u.username === username)) {
-      return { error: 'Username already exists' };
+  async signup(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        localStorage.setItem('auth_token', result.data.access_token);
+        localStorage.setItem('current_user', JSON.stringify(result.data.user));
+        return { user: result.data.user, token: result.data.access_token };
+      }
+
+      return { error: result.message || result.error?.details?.toString() || 'Signup failed' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
     }
-    
-    if (users.find(u => u.email === email)) {
-      return { error: 'Email already registered' };
+  },
+
+  async me(): Promise<{ user?: User; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: authHeaders(),
+      });
+
+      const result: ApiResponse<User> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        localStorage.setItem('current_user', JSON.stringify(result.data));
+        return { user: result.data };
+      }
+
+      return { error: result.message || 'Failed to get user info' };
+    } catch (error) {
+      return { error: 'Network error' };
     }
-    
-    const newUser: StoredUser = {
-      id: crypto.randomUUID(),
-      username,
-      email,
-      password,
-    };
-    
-    users.push(newUser);
-    saveUsers(users);
-    
-    const { password: _, ...userWithoutPassword } = newUser;
-    localStorage.setItem('current_user', JSON.stringify(userWithoutPassword));
-    return { user: userWithoutPassword };
   },
 
   getCurrentUser(): User | null {
@@ -70,62 +88,123 @@ export const authAPI = {
     return user ? JSON.parse(user) : null;
   },
 
+  getToken(): string | null {
+    return localStorage.getItem('auth_token');
+  },
+
   logout() {
     localStorage.removeItem('current_user');
+    localStorage.removeItem('auth_token');
   },
 };
 
-// Chat API (Dummy)
+// Chat API
 export const chatAPI = {
-  async sendMessage(message: string): Promise<string> {
-    await delay(1000 + Math.random() * 1000);
-    
-    const responses = [
-      "I understand you're asking about medical imaging. PACS systems are essential for managing radiological data efficiently.",
-      "That's a great question! In medical imaging, proper configuration of PACS nodes is crucial for seamless data transfer.",
-      "Based on your query, I'd recommend checking your DICOM settings and ensuring proper network connectivity between nodes.",
-      "Medical imaging workflows require careful attention to detail. Let me help you understand the key aspects of your configuration.",
-      "PACS (Picture Archiving and Communication System) is fundamental to modern radiology. How can I assist you further?",
-      "I can help you with various aspects of medical imaging, from DICOM protocols to workflow optimization.",
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+  async sendMessage(request: ChatRequest): Promise<{ response?: string; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/agent/chat`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(request),
+      });
+
+      const result: ApiResponse<{ response: string }> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        return { response: result.data.response };
+      }
+
+      return { error: result.message || 'Failed to get response' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
+    }
   },
 };
 
 // PACS API
 export const pacsAPI = {
-  getConfigurations(): PACSConfiguration[] {
-    const configs = localStorage.getItem(PACS_KEY);
-    return configs ? JSON.parse(configs) : [];
+  async getConfigurations(): Promise<{ configs?: PACSConfiguration[]; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pacs`, {
+        method: 'GET',
+        headers: authHeaders(),
+      });
+
+      const result: ApiResponse<PACSConfiguration[]> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        return { configs: result.data };
+      }
+
+      return { error: result.message || 'Failed to load configurations' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
+    }
   },
 
-  saveConfiguration(config: Omit<PACSConfiguration, 'id' | 'createdAt'>): PACSConfiguration {
-    const configs = this.getConfigurations();
-    const newConfig: PACSConfiguration = {
-      ...config,
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-    };
-    configs.push(newConfig);
-    localStorage.setItem(PACS_KEY, JSON.stringify(configs));
-    return newConfig;
+  async createConfiguration(config: {
+    display_name: string;
+    base_rs: string;
+    location?: string;
+    headers?: Record<string, string>;
+    auth?: Record<string, string>;
+    tags: string[];
+  }): Promise<{ config?: PACSConfiguration; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pacs`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(config),
+      });
+
+      const result: ApiResponse<PACSConfiguration> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        return { config: result.data };
+      }
+
+      return { error: result.message || 'Failed to create configuration' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
+    }
   },
 
-  deleteConfiguration(id: string): boolean {
-    const configs = this.getConfigurations();
-    const filtered = configs.filter(c => c.id !== id);
-    localStorage.setItem(PACS_KEY, JSON.stringify(filtered));
-    return filtered.length < configs.length;
+  async updateConfiguration(id: string, updates: Partial<PACSConfiguration>): Promise<{ config?: PACSConfiguration; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pacs/${id}`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify(updates),
+      });
+
+      const result: ApiResponse<PACSConfiguration> = await response.json();
+
+      if (result.status === 'success' && result.data) {
+        return { config: result.data };
+      }
+
+      return { error: result.message || 'Failed to update configuration' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
+    }
   },
 
-  updateConfiguration(id: string, updates: Partial<PACSConfiguration>): PACSConfiguration | null {
-    const configs = this.getConfigurations();
-    const index = configs.findIndex(c => c.id === id);
-    if (index === -1) return null;
-    
-    configs[index] = { ...configs[index], ...updates };
-    localStorage.setItem(PACS_KEY, JSON.stringify(configs));
-    return configs[index];
+  async deleteConfiguration(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pacs/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+
+      const result: ApiResponse = await response.json();
+
+      if (result.status === 'success') {
+        return { success: true };
+      }
+
+      return { success: false, error: result.message || 'Failed to delete configuration' };
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
   },
 };
