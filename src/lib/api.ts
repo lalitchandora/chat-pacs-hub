@@ -19,7 +19,7 @@ const authHeaders = (): HeadersInit => {
 
 // Auth API
 export const authAPI = {
-  async login(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+  async login(username: string, password: string): Promise<{ token?: string; error?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -27,21 +27,42 @@ export const authAPI = {
         body: JSON.stringify({ username, password }),
       });
 
-      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
-
-      if (result.status === 'success' && result.data) {
-        localStorage.setItem('auth_token', result.data.access_token);
-        localStorage.setItem('current_user', JSON.stringify(result.data.user));
-        return { user: result.data.user, token: result.data.access_token };
+      // Handle validation errors (422) - different response format
+      if (response.status === 422) {
+        const errorData = await response.json();
+        const messages = errorData.detail?.map((d: any) => d.msg).filter(Boolean) || [];
+        return { error: messages.join(', ') || 'Validation error' };
       }
 
-      return { error: result.message || result.error?.details?.toString() || 'Login failed' };
+      const result: ApiResponse<any> = await response.json();
+
+      if (response.ok && result.status === 'success' && result.data) {
+        // Handle different possible response structures
+        // Could be: { access_token: string } or { token: string } or just a string
+        let token: string | null = null;
+        
+        if (typeof result.data === 'string') {
+          token = result.data;
+        } else if (result.data.access_token) {
+          token = result.data.access_token;
+        } else if (result.data.token) {
+          token = result.data.token;
+        }
+
+        if (token) {
+          localStorage.setItem('auth_token', token);
+          return { token };
+        }
+      }
+
+      // Handle error responses
+      return { error: result.message || (typeof result.error?.details === 'string' ? result.error.details : result.error?.details?.toString()) || 'Login failed' };
     } catch (error) {
       return { error: 'Network error. Please try again.' };
     }
   },
 
-  async signup(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+  async signup(username: string, password: string): Promise<{ token?: string; error?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
@@ -49,15 +70,35 @@ export const authAPI = {
         body: JSON.stringify({ username, password }),
       });
 
-      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
-
-      if (result.status === 'success' && result.data) {
-        localStorage.setItem('auth_token', result.data.access_token);
-        localStorage.setItem('current_user', JSON.stringify(result.data.user));
-        return { user: result.data.user, token: result.data.access_token };
+      // Handle validation errors (422) - different response format
+      if (response.status === 422) {
+        const errorData = await response.json();
+        const messages = errorData.detail?.map((d: any) => d.msg).filter(Boolean) || [];
+        return { error: messages.join(', ') || 'Validation error' };
       }
 
-      return { error: result.message || result.error?.details?.toString() || 'Signup failed' };
+      const result: ApiResponse<any> = await response.json();
+
+      if (response.ok && result.status === 'success' && result.data) {
+        // Handle different possible response structures
+        let token: string | null = null;
+        
+        if (typeof result.data === 'string') {
+          token = result.data;
+        } else if (result.data.access_token) {
+          token = result.data.access_token;
+        } else if (result.data.token) {
+          token = result.data.token;
+        }
+
+        if (token) {
+          localStorage.setItem('auth_token', token);
+          return { token };
+        }
+      }
+
+      // Handle error responses
+      return { error: result.message || (typeof result.error?.details === 'string' ? result.error.details : result.error?.details?.toString()) || 'Signup failed' };
     } catch (error) {
       return { error: 'Network error. Please try again.' };
     }
@@ -69,6 +110,15 @@ export const authAPI = {
         method: 'GET',
         headers: authHeaders(),
       });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          this.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to get user info' };
+      }
 
       const result: ApiResponse<User> = await response.json();
 
@@ -108,13 +158,29 @@ export const chatAPI = {
         body: JSON.stringify(request),
       });
 
-      const result: ApiResponse<{ response: string }> = await response.json();
+      console.log(response);
 
-      if (result.status === 'success' && result.data) {
-        return { response: result.data.response };
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          // authAPI.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        if (response.status === 422) {
+          const errorData = await response.json();
+          const messages = errorData.detail?.map((d: any) => d.msg).filter(Boolean) || [];
+          return { error: messages.join(', ') || 'Validation error' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to get response' };
       }
 
-      return { error: result.message || 'Failed to get response' };
+      const result: ApiResponse<{ llm: string }> = await response.json();
+      console.log(result);
+      if (result.status === 'success' && result.data) {
+        return { response: result.data.llm };
+      }
+
+      return { error: result.error?.details?.toString() || 'Failed to get response' };
     } catch (error) {
       return { error: 'Network error. Please try again.' };
     }
@@ -129,6 +195,15 @@ export const pacsAPI = {
         method: 'GET',
         headers: authHeaders(),
       });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          authAPI.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to load configurations' };
+      }
 
       const result: ApiResponse<PACSConfiguration[]> = await response.json();
 
@@ -157,6 +232,20 @@ export const pacsAPI = {
         body: JSON.stringify(config),
       });
 
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          authAPI.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        if (response.status === 422) {
+          const errorData = await response.json();
+          const messages = errorData.detail?.map((d: any) => d.msg).filter(Boolean) || [];
+          return { error: messages.join(', ') || 'Validation error' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to create configuration' };
+      }
+
       const result: ApiResponse<PACSConfiguration> = await response.json();
 
       if (result.status === 'success' && result.data) {
@@ -177,6 +266,20 @@ export const pacsAPI = {
         body: JSON.stringify(updates),
       });
 
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          authAPI.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        if (response.status === 422) {
+          const errorData = await response.json();
+          const messages = errorData.detail?.map((d: any) => d.msg).filter(Boolean) || [];
+          return { error: messages.join(', ') || 'Validation error' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to update configuration' };
+      }
+
       const result: ApiResponse<PACSConfiguration> = await response.json();
 
       if (result.status === 'success' && result.data) {
@@ -195,6 +298,15 @@ export const pacsAPI = {
         method: 'DELETE',
         headers: authHeaders(),
       });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          authAPI.logout();
+          return { success: false, error: 'Authentication failed. Please login again.' };
+        }
+        const result: ApiResponse = await response.json();
+        return { success: false, error: result.message || 'Failed to delete configuration' };
+      }
 
       const result: ApiResponse = await response.json();
 

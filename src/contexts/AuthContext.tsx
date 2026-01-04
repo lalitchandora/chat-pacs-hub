@@ -33,9 +33,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (username: string, password: string) => {
     const result = await authAPI.login(username, password);
-    if (result.user && result.token) {
-      setUser(result.user);
+    if (result.token) {
       setToken(result.token);
+      // Fetch user info after getting token
+      const meResult = await authAPI.me();
+      if (meResult.user) {
+        setUser(meResult.user);
+        return { success: true };
+      }
+      // Token valid but couldn't get user - still consider it a success
+      // User will be fetched on next /auth/me call
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -43,9 +50,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (username: string, password: string) => {
     const result = await authAPI.signup(username, password);
-    if (result.user && result.token) {
-      setUser(result.user);
+    if (result.token) {
       setToken(result.token);
+      // Fetch user info after getting token
+      const meResult = await authAPI.me();
+      if (meResult.user) {
+        setUser(meResult.user);
+        return { success: true };
+      }
+      // Token valid but couldn't get user - still consider it a success
       return { success: true };
     }
     return { success: false, error: result.error };

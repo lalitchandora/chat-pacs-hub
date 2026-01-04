@@ -88,7 +88,11 @@ const PACSConfig = () => {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    console.log('hi');
+    
     const result = await pacsAPI.deleteConfiguration(id);
+    console.log(result, 'result');
+    
     if (result.success) {
       loadConfigurations();
       toast({
@@ -226,7 +230,7 @@ const PACSConfig = () => {
                   )}
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
