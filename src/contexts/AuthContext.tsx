@@ -33,9 +33,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (username: string, password: string) => {
     const result = await authAPI.login(username, password);
-    if (result.user && result.token) {
-      setUser(result.user);
+    if (result.token) {
       setToken(result.token);
+      // Fetch user data after successful login
+      const meResult = await authAPI.me();
+      if (meResult.user) {
+        setUser(meResult.user);
+      }
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -43,10 +47,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (username: string, password: string) => {
     const result = await authAPI.signup(username, password);
-    if (result.user && result.token) {
-      setUser(result.user);
-      setToken(result.token);
-      return { success: true };
+    if (result.user) {
+      // After signup, automatically login
+      return await login(username, password);
     }
     return { success: false, error: result.error };
   };

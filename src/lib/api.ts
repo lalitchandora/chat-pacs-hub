@@ -17,9 +17,17 @@ const authHeaders = (): HeadersInit => {
   return headers;
 };
 
+// Helper to extract error message from API response
+const getErrorMessage = (result: ApiResponse): string => {
+  if (result.error?.details && Array.isArray(result.error.details)) {
+    return result.error.details.map((d: { msg: string }) => d.msg).join(', ');
+  }
+  return result.message || 'An error occurred';
+};
+
 // Auth API
 export const authAPI = {
-  async login(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+  async login(username: string, password: string): Promise<{ token?: string; error?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -27,21 +35,20 @@ export const authAPI = {
         body: JSON.stringify({ username, password }),
       });
 
-      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
+      const result: ApiResponse<{ access_token: string; token_type: string }> = await response.json();
 
       if (result.status === 'success' && result.data) {
         localStorage.setItem('auth_token', result.data.access_token);
-        localStorage.setItem('current_user', JSON.stringify(result.data.user));
-        return { user: result.data.user, token: result.data.access_token };
+        return { token: result.data.access_token };
       }
 
-      return { error: result.message || result.error?.details?.toString() || 'Login failed' };
+      return { error: getErrorMessage(result) };
     } catch (error) {
       return { error: 'Network error. Please try again.' };
     }
   },
 
-  async signup(username: string, password: string): Promise<{ user?: User; token?: string; error?: string }> {
+  async signup(username: string, password: string): Promise<{ user?: User; error?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
@@ -49,15 +56,17 @@ export const authAPI = {
         body: JSON.stringify({ username, password }),
       });
 
-      const result: ApiResponse<{ user: User; access_token: string }> = await response.json();
+      const result: ApiResponse<{ id: string; username: string; pac_ids: string[] }> = await response.json();
 
       if (result.status === 'success' && result.data) {
-        localStorage.setItem('auth_token', result.data.access_token);
-        localStorage.setItem('current_user', JSON.stringify(result.data.user));
-        return { user: result.data.user, token: result.data.access_token };
+        const user: User = {
+          id: result.data.id,
+          username: result.data.username,
+        };
+        return { user };
       }
 
-      return { error: result.message || result.error?.details?.toString() || 'Signup failed' };
+      return { error: getErrorMessage(result) };
     } catch (error) {
       return { error: 'Network error. Please try again.' };
     }
