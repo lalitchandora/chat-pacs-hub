@@ -1,4 +1,4 @@
-import { User, PACSConfiguration, ApiResponse, ChatRequest } from '@/types';
+import { User, PACSConfiguration, ApiResponse, ChatRequest, ChatMessage } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -150,6 +150,37 @@ export const authAPI = {
 
 // Chat API
 export const chatAPI = {
+  async getAllChats(): Promise<{ chats?: ChatMessage[]; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/agent/chats`, {
+        method: 'GET',
+        headers: authHeaders(),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          authAPI.logout();
+          return { error: 'Authentication failed. Please login again.' };
+        }
+        const result: ApiResponse = await response.json();
+        return { error: result.message || 'Failed to load chats' };
+      }
+
+      const result: ApiResponse<{messages: ChatMessage[]}> = await response.json();
+      console.log(result, ' get all chats result');
+      if (result.status === 'success' && result.data) {
+        // Ensure data is an array
+        const chats = Array.isArray(result.data.messages) ? result.data.messages : [];
+        console.log(chats, ' chats');
+        return { chats };
+      }
+
+      return { error: result.message || 'Failed to load chats' };
+    } catch (error) {
+      return { error: 'Network error. Please try again.' };
+    }
+  },
+
   async sendMessage(request: ChatRequest): Promise<{ response?: string; error?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/agent/chat`, {
@@ -157,8 +188,6 @@ export const chatAPI = {
         headers: authHeaders(),
         body: JSON.stringify(request),
       });
-
-      console.log(response);
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
@@ -175,7 +204,6 @@ export const chatAPI = {
       }
 
       const result: ApiResponse<{ llm: string }> = await response.json();
-      console.log(result);
       if (result.status === 'success' && result.data) {
         return { response: result.data.llm };
       }
