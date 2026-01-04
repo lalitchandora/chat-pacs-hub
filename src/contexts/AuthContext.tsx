@@ -33,16 +33,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (username: string, password: string) => {
     const result = await authAPI.login(username, password);
-    if (result.token) {
-      setToken(result.token);
-      // Fetch user data after successful login
-      const meResult = await authAPI.me();
-      if (meResult.user) {
-        setUser(meResult.user);
-      }
+    if (!result.token) {
+      return { success: false, error: result.error };
+    }
+
+    setToken(result.token);
+
+    // Ensure we can fetch /auth/me before declaring login success.
+    const meResult = await authAPI.me();
+    if (meResult.user) {
+      setUser(meResult.user);
       return { success: true };
     }
-    return { success: false, error: result.error };
+
+    // Token was issued but we couldn't establish a session; clear and report.
+    authAPI.logout();
+    setUser(null);
+    setToken(null);
+    return { success: false, error: meResult.error || 'Failed to load user session' };
   };
 
   const signup = async (username: string, password: string) => {
